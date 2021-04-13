@@ -1,6 +1,8 @@
 # NS-SHAFT-Game
+
 小朋友下樓梯遊戲
 
+想玩想懷舊一下的話check here: https://chiderlin.github.io/NS-SHAFT-Game-practice/
 
 ### 簡介
 * Phaser 套件
