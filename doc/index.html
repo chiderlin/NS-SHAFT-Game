@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://cdn.jsdelivr.net/phaser/2.6.2/phaser.min.js"></script>
+
+
+</head>
+<body>
+    <div style=position:fixed;left:500px;top:10px>
+        遊戲規則:
+    </div>
+    <div style=position:fixed;left:500px;top:30px;width:250px;>
+        遊戲結束後可按F5重新開始遊戲，
+        每人生命值有10，刺到-1，踩到藍色石磚+1。
+        踩到石磚(不管藍or灰)都會列入是否到下個level的計算。
+    </div>
+    <script>
+        // 載入引擎，資源
+        var game = new Phaser.Game(400, 400, Phaser.AUTO, '',
+            { preload: preload, create: create, update: update });
+
+        var player;
+        var keyboard; 
+        var platforms = [];
+        var leftWall;
+        var rightWall;
+        var ceiling;
+        var text;
+        var text_for_game_over;
+        var text_for_level;
+
+        // 一個 spritesheet 包含很多個分別的圖片，這樣的做法有助於減少儲存空間
+        // image 就是一個靜態
+        function preload() {
+            game.load.baseURL = "https://wacamoto.github.io/NS-Shaft-Tutorial/assets/";
+            game.load.crossOrigin = "anonymous";
+            game.load.spritesheet('player', 'player.png', 32, 32); // 32一個人物的大小
+            game.load.image('wall', 'wall.png'); // 左右牆壁
+            game.load.image('ceiling', 'ceiling.png'); // 天花板
+            game.load.image('normal', 'normal.png') // 正常石磚
+            game.load.image('nails', 'nails.png') // 刺刺板
+            game.load.spritesheet('conveyorLeft', 'conveyor_left.png', 96, 16) // 左滑梯
+            game.load.spritesheet('conveyorRight', 'conveyor_right.png', 96, 16) // 右滑梯
+            game.load.spritesheet('fake', 'fake.png', 96, 36) // 假石磚
+            game.load.spritesheet('trampoline', 'trampoline.png', 96, 22) // 彈簧
+
+        }
+        // 遊戲精靈，在遊戲中任何的東西都可以稱為 sprite 
+        function create() {
+            createPlayer();
+            createTexts();
+            createBounders();
+            // createPlatforms();
+
+            keyboard = game.input.keyboard.addKeys({ //感應鍵盤
+                'up': Phaser.Keyboard.UP,
+                'down': Phaser.Keyboard.DOWN,
+                'left': Phaser.Keyboard.LEFT,
+                'right': Phaser.Keyboard.RIGHT,
+                'enter': Phaser.Keyboard.ENTER,
+            });
+        };
+
+        function update() { // 動作撰寫
+            game.physics.arcade.collide(player, [leftWall, rightWall]); // 接受陣列作為參，檢查玩家左牆右牆碰撞功能
+            game.physics.arcade.collide(player, platforms, effect); // platforms本身就是陣列 ，第三個參數 effect 是碰撞時執行的函式
+
+            if(keyboard.left.isDown) { // 判斷某個鍵是否被按下
+                player.body.velocity.x = -200;
+                player.animations.play('left'); // 播放動畫 => 執行左鍵
+
+            } else if(keyboard.right.isDown) {
+                player.body.velocity.x = 200; // 播放動畫 => 執行右鍵
+                player.animations.play('right');
+
+            } else {
+                player.body.velocity.x = 0;
+                player.frame = 8; // 腳色沒動時，設定外觀為圖片編號8 (正面圖)
+            }
+            // platform.body.y -= 2; // 平台往上移動 => 石磚會一直向上移動
+            checkTouchCeiling();
+            checkGameOver();        
+            checkLevel(); 
+            updatePlatforms(); // 把石磚移動的功能寫到這邊
+            createPlatforms(); // 不斷製造石磚
+            text.setText(player.life); // 動態改變生命值
+            text_for_level.setText(`B${player.level}`); // 下樓梯玩到第幾層
+        };
+
+        function createTexts() {
+            var style = {fill: '#FFFFFF', fontSize: '20px'}; //要用var才能在別的func用
+            text = game.add.text(30, 20, '', style); // 創造文字物件 game.add.text(x座標, y座標, 文字內容, 樣式);
+            text_for_game_over = game.add.text(165, 200, '遊戲結束', style);
+            text_for_game_over.visible = false; // 一開始不顯示，遊戲結束才顯示
+            text_for_level = game.add.text(330, 20, '', style);
+        };
+        
+        function createPlayer() {
+            player = game.add.sprite(200, 100, 'player'); // 人物創建的地標位置
+            game.physics.arcade.enable(player); // 掛載物理引擎，例如移動、碰撞等 => 背景圖不需物理引擎
+            player.body.gravity.y = 500; // 可以設定施加在角色身上的地心引力 (往下掉)
+            player.animations.add('left', [0,1,2,3], 6); //幫角色增加動畫 sprite.animations.add(動畫名字, 影格, 每秒幀數)
+            player.animations.add('right', [9,10,11,12], 6);
+            player.frame = 8;
+            player.life = 10; //玩家生命值
+            player.touchOn = undefined; // 存放碰撞物體
+            player.unbeatableTime = 0; // 用來防止重複觸法事件
+            player.touchCount = 0;
+            player.level = 0;
+        };
+
+        function createBounders() {
+            leftWall = game.add.sprite(0, 0, 'wall');
+            game.physics.arcade.enable(leftWall); // 啟動物理引擎
+            leftWall.body.immovable = true; // 設false會怎樣?
+
+            rightWall = game.add.sprite(383, 0, 'wall');
+            game.physics.arcade.enable(rightWall);
+            rightWall.body.immovable = true;
+
+            ceiling = game.add.sprite(0, 0, 'ceiling');
+        };
+
+        var lastTime = 0;
+        function createPlatforms() {
+            if(game.time.now > lastTime+600) { // 每隔一段時間(600ms)創造新的平台
+                lastTime = game.time.now;
+                createOnePlatform();
+            }
+
+        };
+
+        function createOnePlatform() {
+            let platform;
+            let x = Math.random() * (400-96-40)+20; // 20 ~ 284之間隨機  計算石磚的位置不可以卡到牆壁或超出牆壁
+            let random = Math.random() * 100; // 0-100之間隨機
+            if(random < 20) {
+                platform = game.add.sprite(x, 400, 'normal');
+
+            } else if(random < 30) {
+                platform = game.add.sprite(x, 400, 'conveyorLeft');
+                platform.animations.add('scroll', [0,1,2,3], 16, true) // 第四個參數動畫會不停播放
+                platform.play('scroll'); // 動畫要動要play
+
+            } else if(random < 40) {
+                platform = game.add.sprite(x, 400, 'conveyorRight');
+                platform.animations.add('scroll', [0,1,2,3], 16, true)
+                platform.play('scroll');
+
+            } else if(random < 60) {
+                platform = game.add.sprite(x, 400, 'trampoline');
+                platform.animations.add('jump', [4,5,4,3,2,1,0,1,2,3], 120)
+                platform.frame = 3;
+
+            } else if(random < 80) {
+                platform = game.add.sprite(x, 400, 'nails');
+                game.physics.arcade.enable(platform); // 碰到會有反應
+                platform.body.setSize(96, 15, 0, 15); // 修改圖片碰撞邊界 sprite.body.setSize(長, 寬, x座標, y座標)
+
+            } else {
+                platform = game.add.sprite(x, 400, 'fake');
+                platform.animations.add('turn', [1,2,3,4,5,0], 6)
+                platform.frame = 0;
+            }
+            game.physics.arcade.enable(platform);
+            platform.body.immovable = true;
+            platforms.push(platform); // 所以石磚會一直累積進去陣列裡面越來越多
+
+            platform.body.checkCollision.down = false; // 不太懂這裡
+            platform.body.checkCollision.left = false;
+            platform.body.checkCollision.right = false;
+        };
+
+        function updatePlatforms() {
+            for(let i=0; i<platforms.length; i++) {
+                platforms[i].body.y -= 2; // 石磚一直往上移動
+                if(platforms[i].body.y < 0) {
+                    platforms[i].destroy(); // 移除平台
+                    platforms.splice(i, 1); // 從陣列移出第一個東西，讓陣列維持在6個長度
+
+                }
+            }
+        };
+
+        function effect(player, platform) { // 定義effect，傳入的參數是碰撞的兩個 sprite
+            // 當腳色跟platform時會發生?
+            // console.log(platform.key); //platform.key 會是 sprite 傳入圖片的名字
+            if(platform.key === 'conveyorLeft') {
+                player.body.x -= 2;
+            } else if(platform.key === 'conveyorRight') {
+                player.body.x += 2;
+            } else if(platform.key === 'trampoline') {
+                player.body.velocity.y = -350;
+                platform.play('jump');
+            } else if(platform.key === 'nails') {
+                if(player.touchOn !== platform) { // 碰到刺只能扣一次血，用touchOn來偵測，如果===platform => nails就表示扣過了
+                    player.life -= 1;
+                    player.touchOn = platform;
+                }
+            } else if(platform.key === 'normal') {
+                if(player.touchOn !== platform) { // 如果platform 不等於normal 表示還沒加血
+                    if(player.life < 10) { // 血最多10
+                        player.life += 1;
+                    }
+                    player.touchCount++;
+                    player.touchOn = platform; // 等於normal 加過血
+                }
+            } else if(platform.key === 'fake') {
+                if(player.touchOn !== platform) {
+                    setTimeout(function() { // 延遲執行
+                        platform.play('turn');
+                        platform.body.checkCollision.up = false;
+                    }, 100); // 100ms
+                    player.touchCount++;
+                    player.touchOn = platform;
+                }
+            }
+        };
+
+
+        function checkTouchCeiling() { // 碰到天花板扣血
+            if(player.body.y < 0) {
+                if(game.time.now > player.unbeatableTime) {
+                    player.unbeatableTime = game.time.now + 2000;
+                    player.life -= 1;
+                }
+
+            }
+        };
+        function checkGameOver() {
+            if(player.body.y > 450 || player.life < 0) {
+                gameOver();
+            }
+        };
+
+
+        function gameOver() {
+            platforms.forEach(function(i) {i.destroy()});
+            platforms = [];
+            text_for_game_over.visible = true;
+            text.setText(player.life='');
+            if(keyboard.enter.isDown) {
+                rePlay();
+            }
+
+        };
+
+        function rePlay() {
+            text_for_game_over.visible = false;
+            text_for_level.setText(player.level='');
+            player.level = 0;
+            create();      
+        };
+
+        function checkLevel() {
+            if(player.touchCount > 6) {
+                player.level ++;
+                player.touchCount = 0;
+            }
+        }
+
+
+    </script>
+</body>
+</html>
