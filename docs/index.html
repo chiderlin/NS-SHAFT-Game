@@ -128,7 +128,7 @@
 
         var lastTime = 0;
         function createPlatforms() {
-            if(game.time.now > lastTime+600) { // 每隔一段時間(600ms)創造新的平台
+            if(game.time.now > lastTime+500) { // 每隔一段時間(600ms)創造新的平台
                 lastTime = game.time.now;
                 createOnePlatform();
             }
@@ -178,7 +178,7 @@
 
         function updatePlatforms() {
             for(let i=0; i<platforms.length; i++) {
-                platforms[i].body.y -= 1; // 石磚一直往上移動
+                platforms[i].body.y -= 2; // 石磚一直往上移動
                 if(platforms[i].body.y < 0) {
                     platforms[i].destroy(); // 移除平台
                     platforms.splice(i, 1); // 從陣列移出第一個東西，讓陣列維持在6個長度
