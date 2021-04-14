@@ -129,10 +129,11 @@
         var lastTime = 0;
         function createPlatforms() {
             if(game.time.now > lastTime+500) { // 每隔一段時間(600ms)創造新的平台
-                lastTime = game.time.now;
-                createOnePlatform();
+                if(player.life > 0 || player.life === 0) { 
+                    lastTime = game.time.now;
+                    createOnePlatform();
+                }
             }
-
         };
 
         function createOnePlatform() {
@@ -224,12 +225,11 @@
 
 
         function checkTouchCeiling() { // 碰到天花板扣血
-            if(player.body.y < 0) {
+            if(player.body.y < 0) { // 讓碰到天花板之後扣的血過了兩秒之後才可以再扣
                 if(game.time.now > player.unbeatableTime) {
-                    player.unbeatableTime = game.time.now + 2000;
-                    player.life -= 1;
+                    player.unbeatableTime = game.time.now + 2000; 
+                    player.life -= 2;
                 }
-
             }
         };
         function checkGameOver() {
@@ -247,7 +247,6 @@
             if(keyboard.enter.isDown) {
                 rePlay();
             }
-
         };
 
         function rePlay() {
